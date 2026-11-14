@@ -1,0 +1,44 @@
+# =============================================================================
+#  LivingDesign — docker-compose (étape 2 : les bases de données)
+# =============================================================================
+
+name: livingdesign                
+
+services:                          # la liste des conteneurs à lancer
+
+  postgres:                        # nom du service (on peut l'appeler ainsi entre conteneurs)
+    image: postgres:16             # image officielle, version 16
+    env_file: .env                 # lit les variables (mots de passe…) depuis infra/.env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Volume nommé : les données survivent à l'arrêt du conteneur.
+      - pg_data:/var/lib/postgresql/data
+      - ../db/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:                   # Docker vérifie régulièrement que la base répond
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mongo:
+    image: mongo:7
+    environment:                   # variables attendues par l'image mongo
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD} 
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ../db/mongo/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:                          
+  pg_data:
+  mongo_data:

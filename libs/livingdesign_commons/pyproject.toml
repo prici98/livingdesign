@@ -1,0 +1,22 @@
+# Bibliothèque partagée : ce dont plusieurs parties du projet ont besoin
+# (scripts data, seed, et plus tard les microservices).
+[project]
+name = "livingdesign-commons"
+version = "0.1.0"
+description = "Modèles Pydantic et configuration partagés de LivingDesign"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.9",                 # valider des données avec des classes Python typées
+    "pydantic-settings>=2.6",        # lire la configuration (.env, variables d'environnement)
+]
+
+# Contrairement au projet racine, c'est une vraie bibliothèque qu'on importe
+# ("from livingdesign_commons import Product") : elle a besoin d'un outil de construction.
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+# Le code est dans src/livingdesign_commons/ ("src layout" : évite d'importer
+# par erreur le dossier local au lieu de la bibliothèque installée).
+[tool.hatch.build.targets.wheel]
+packages = ["src/livingdesign_commons"]

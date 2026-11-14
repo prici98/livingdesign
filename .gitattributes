@@ -1,0 +1,7 @@
+# Les conteneurs tournent sous Linux, qui attend des fins de ligne LF.
+# Sous Windows, VS Code écrit par défaut des fins de ligne CRLF : un script .sh
+# en CRLF plante dans un conteneur. On uniformise en LF pour être tranquille.
+*.sql  text eol=lf
+*.sh   text eol=lf
+*.js   text eol=lf
+*.yml  text eol=lf

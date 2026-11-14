@@ -1,0 +1,20 @@
+# Environnement Python local
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets : on partage infra/.env.example, jamais infra/.env
+.env
+infra/.env
+
+# Données : ni le dataset brut, ni ce qu'on génère
+data-platform/data/
+
+# Java (Maven) et éditeurs
+target/
+.vscode/
+.idea/
+
+# Caches des outils
+.pytest_cache/
+.ruff_cache/

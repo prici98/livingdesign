@@ -1,0 +1,31 @@
+# =============================================================================
+#  Intégration continue : GitHub lance ces vérifications à chaque push et à
+#  chaque pull request. Une PR dont la CI est rouge ne doit pas être fusionnée.
+# =============================================================================
+name: CI
+
+on:
+  push:                   
+  pull_request:
+    branches: [main]      
+
+jobs:
+  qualite:
+    runs-on: ubuntu-latest          
+    steps:
+      - uses: actions/checkout@v4    # récupère le code du dépôt
+
+      - uses: astral-sh/setup-uv@v6  # installe uv
+        with:
+          enable-cache: true         # garde les paquets téléchargés d'une exécution à l'autre
+
+      # --locked : échoue si uv.lock ne correspond plus à pyproject.toml
+      # (quelqu'un a modifié les dépendances sans committer uv.lock).
+      - name: Installer les dépendances
+        run: uv sync --locked
+
+      - name: Vérifier le code (ruff)
+        run: uv run ruff check .
+
+      - name: Lancer les tests (pytest)
+        run: uv run pytest

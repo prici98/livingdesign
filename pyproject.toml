@@ -1,0 +1,26 @@
+# =============================================================================
+#  pyproject.toml — la carte d'identité du projet Python (standard PEP 621)
+# =============================================================================
+
+[tool.uv.workspace]
+members = ["libs/livingdesign_commons"]
+
+# "livingdesign-commons" ne vient pas de PyPI mais du workspace (dossier libs/).
+[tool.uv.sources]
+livingdesign-commons = { workspace = true }
+
+# ----------------------------------------------------------------------------
+#  Réglages des outils
+# ----------------------------------------------------------------------------
+[tool.ruff]
+line-length = 120                    # longueur maximale d'une ligne
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F : erreurs et imports inutilisés, UP : syntaxe Python moderne, B : bugs probables.
+# (On n'active pas le tri automatique des imports "I" : il supprimerait l'alignement
+# des commentaires pédagogiques en fin de ligne.)
+select = ["E", "F", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["libs", "data-platform"]   # où pytest cherche les tests
