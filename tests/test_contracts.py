@@ -1,6 +1,7 @@
 """Validation structurelle et syntaxique des contrats d'API."""
 
 from pathlib import Path
+from graphql import build_schema
 import yaml
 
 CONTRACTS_DIR = Path(__file__).resolve().parent.parent / "contracts"
@@ -76,5 +77,41 @@ def test_inventory_openapi_spec_structure():
     assert "Warehouse" in schemas
     assert "WarehouseFillRate" in schemas
     assert "ProblemDetails" in schemas
+
+
+def test_catalog_graphql_schema_structure():
+    """Verifie que le schema GraphQL de catalog est syntaxiquement valide et complet."""
+    schema_path = CONTRACTS_DIR / "graphql" / "schema.graphql"
+    assert schema_path.is_file(), "Le fichier schema.graphql est introuvable."
+
+    schema_content = schema_path.read_text(encoding="utf-8")
+    schema = build_schema(schema_content)
+
+    # Verifie la presence des types cles
+    type_map = schema.type_map
+    assert "Product" in type_map
+    assert "Category" in type_map
+    assert "ProductStatus" in type_map
+    assert "SoldPer" in type_map
+    assert "AttributeEntry" in type_map
+    assert "ProductPage" in type_map
+    assert "ProductFilterInput" in type_map
+    assert "CreateProductInput" in type_map
+
+    # Verifie les queries attendues
+    query_type = schema.query_type
+    assert query_type is not None
+    assert "product" in query_type.fields
+    assert "products" in query_type.fields
+    assert "categories" in query_type.fields
+    assert "searchProducts" in query_type.fields
+
+    # Verifie les mutations administratives attendues
+    mutation_type = schema.mutation_type
+    assert mutation_type is not None
+    assert "createProduct" in mutation_type.fields
+    assert "updateProductPrice" in mutation_type.fields
+    assert "setProductStatus" in mutation_type.fields
+
 
 

@@ -1,0 +1,148 @@
+"""
+Contrat GraphQL du microservice Catalog de LivingDesign.
+Expose la consultation et l'administration des produits stockes dans MongoDB.
+"""
+
+scalar JSON
+scalar DateTime
+
+"""
+Categories officielles du catalogue LivingDesign.
+Les valeurs correspondent a l'enum Category du package livingdesign_commons.
+"""
+enum Category {
+  LUMINAIRES
+  CANAPES_FAUTEUILS
+  LITS_LITERIE
+  DECORATION
+  TEXTILES
+  RANGEMENT
+  CUISINE_ARTS_TABLE
+  TABLES_CHAISES
+  AUTRES
+}
+
+"""
+Statut de visibilite du produit dans le catalogue public.
+"""
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+"""
+Information de conditionnement pour la vente au lot ou a la mesure.
+Exemple: 6,90 EUR les 10 pieces ou 9,90 EUR le metre.
+"""
+type SoldPer {
+  quantity: Float!
+  unit: String!
+}
+
+"""
+Paire cle-valeur typant une mesure dimensionnelle ou technique d'un produit.
+Permet d'extraire les attributs variables sans schema rigide.
+"""
+type AttributeEntry {
+  name: String!
+  value: Float!
+}
+
+"""
+Entite Produit complete du catalogue.
+Reflete le document MongoDB et le modele Pydantic Product.
+"""
+type Product {
+  productId: Int!
+  sourceUid: String!
+  name: String!
+  productType: String!
+  description: String!
+  category: Category!
+  priceCents: Int!
+  previousPriceCents: Int
+  soldPer: SoldPer
+  status: ProductStatus!
+  attributes: [AttributeEntry!]!
+  rawAttributes: JSON
+  indexedAt: DateTime
+}
+
+"""
+Criteres de filtrage multicriteres pour les listes de produits.
+"""
+input ProductFilterInput {
+  category: Category
+  status: ProductStatus
+  minPriceCents: Int
+  maxPriceCents: Int
+  search: String
+}
+
+"""
+Structure de pagination par offset pour les listings de produits.
+"""
+type ProductPage {
+  items: [Product!]!
+  totalCount: Int!
+  limit: Int!
+  offset: Int!
+  hasNextPage: Boolean!
+}
+
+type Query {
+  """
+  Recherche un produit unique par son identifiant produit.
+  """
+  product(id: Int!): Product
+
+  """
+  Retourne une page de produits avec application optionnelle de filtres.
+  """
+  products(filter: ProductFilterInput, limit: Int = 20, offset: Int = 0): ProductPage!
+
+  """
+  Liste l'ensemble des categories disponibles sur la plateforme.
+  """
+  categories: [Category!]!
+
+  """
+  Recherche textuelle rapide exploitant l'index textuel pondere MongoDB.
+  """
+  searchProducts(query: String!, limit: Int = 10): [Product!]!
+}
+
+"""
+Donnees requises pour l'enregistrement d'un nouveau produit par un gestionnaire.
+"""
+input CreateProductInput {
+  productId: Int!
+  sourceUid: String!
+  name: String!
+  productType: String!
+  description: String!
+  category: Category!
+  priceCents: Int!
+  previousPriceCents: Int
+  soldPerQuantity: Float
+  soldPerUnit: String
+  status: ProductStatus = ACTIVE
+  attributes: JSON
+}
+
+type Mutation {
+  """
+  Cree un nouveau produit dans le catalogue.
+  """
+  createProduct(input: CreateProductInput!): Product!
+
+  """
+  Met a jour le prix d'un produit existant.
+  """
+  updateProductPrice(productId: Int!, priceCents: Int!): Product!
+
+  """
+  Active ou desactive un produit du catalogue public.
+  """
+  setProductStatus(productId: Int!, status: ProductStatus!): Product!
+}
