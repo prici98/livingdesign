@@ -1,0 +1,263 @@
+openapi: 3.1.0
+info:
+  title: LivingDesign - Payments Service API
+  version: 1.0.0
+  description: |
+    API REST du microservice Payments de LivingDesign.
+    Gere l'execution, la consultation et l'idempotence des transactions financieres.
+    Respecte les regles metier de l'ADR-001 (plafond de 3 000 EUR, montants en centimes).
+
+servers:
+  - url: http://localhost:8003
+    description: Environnement local de developpement
+
+paths:
+  /payments:
+    post:
+      summary: Executer un paiement
+      description: |
+        Traite un paiement pour une commande donnee de maniere strictement idempotente.
+        Si la cle d'idempotence fournie existe deja, le paiement existant est retourne sans reexecution.
+        Tout montant superieur a 300 000 centimes (3 000 EUR) est enregistre avec le statut FAILED.
+      operationId: processPayment
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Identifiant unique (UUID v4) pour garantir l'idempotence du paiement
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentCreateRequest"
+      responses:
+        "201":
+          description: Paiement cree et traite avec succes ou echec metier enregistre
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "200":
+          description: Requete rejouee - renvoi du paiement existant associe a la cle d'idempotence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "400":
+          description: Requete invalide ou entetes manquants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "422":
+          description: Erreur de validation structurelle des donnees
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "500":
+          description: Erreur interne du service de paiement
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /payments/{id}:
+    get:
+      summary: Consulter un paiement par identifiant
+      description: Recupere les details d'une transaction via son identifiant unique
+      operationId: getPaymentById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifiant unique du paiement
+          schema:
+            type: integer
+            minimum: 1
+            example: 42
+      responses:
+        "200":
+          description: Detail du paiement trouve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "404":
+          description: Paiement introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /payments/order/{order_id}:
+    get:
+      summary: Consulter les paiements d'une commande
+      description: Recupere la liste des transactions liees a une commande specifique
+      operationId: getPaymentsByOrderId
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          description: Identifiant de la commande
+          schema:
+            type: integer
+            minimum: 1
+            example: 101
+      responses:
+        "200":
+          description: Liste des paiements associes a la commande
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+        "404":
+          description: Aucun paiement trouve pour cette commande
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /health:
+    get:
+      summary: Verification de disponibilite (Healthcheck)
+      description: Point de terminaison utilise par la gateway et Docker pour verifier l'etat du service
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service operationnel
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+
+components:
+  schemas:
+    PaymentStatus:
+      type: string
+      description: Statut de la transaction financiere
+      enum:
+        - PENDING
+        - SUCCESS
+        - FAILED
+      example: "SUCCESS"
+
+    FailureReason:
+      type: string
+      description: Motif d'echec normalise si le statut est FAILED
+      enum:
+        - AMOUNT_EXCEEDS_LIMIT
+        - INSUFFICIENT_FUNDS
+        - CARD_DECLINED
+        - SYSTEM_ERROR
+      example: "AMOUNT_EXCEEDS_LIMIT"
+
+    PaymentCreateRequest:
+      type: object
+      required:
+        - order_id
+        - amount_cents
+      properties:
+        order_id:
+          type: integer
+          minimum: 1
+          description: Identifiant de la commande a regler
+          example: 101
+        amount_cents:
+          type: integer
+          minimum: 1
+          description: Montant total a debiter en centimes entiers (ex. 2999 = 29,99 EUR)
+          example: 14900
+        idempotency_key:
+          type: string
+          format: uuid
+          description: Cle d'idempotence (optionnelle dans le payload si transmise via le header Idempotency-Key)
+          example: "123e4567-e89b-12d3-a456-426614174000"
+
+    Payment:
+      type: object
+      required:
+        - id
+        - order_id
+        - amount_cents
+        - status
+        - idempotency_key
+        - created_at
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          description: Identifiant unique en base du paiement
+          example: 42
+        order_id:
+          type: integer
+          minimum: 1
+          description: Identifiant de la commande associee
+          example: 101
+        amount_cents:
+          type: integer
+          minimum: 0
+          description: Montant en centimes entiers
+          example: 14900
+        status:
+          $ref: "#/components/schemas/PaymentStatus"
+        idempotency_key:
+          type: string
+          format: uuid
+          description: Cle d'idempotence unique ayant autorise la transaction
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        failure_reason:
+          anyOf:
+            - $ref: "#/components/schemas/FailureReason"
+            - type: "null"
+          description: Motif explicatif obligatoire en cas de statut FAILED
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Horodatage UTC de creation de la transaction
+          example: "2026-11-15T14:30:00Z"
+
+    ProblemDetails:
+      type: object
+      description: Format standard d'erreur HTTP selon la RFC 9457 (remplacant la RFC 7807)
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI identifiant le type d'erreur
+          example: "https://livingdesign.internal/errors/amount-exceeds-limit"
+        title:
+          type: string
+          description: Resume court et lisible du probleme
+          example: "Plafond de paiement depasse"
+        status:
+          type: integer
+          description: Code statut HTTP
+          example: 422
+        detail:
+          type: string
+          description: Explication detaillee du probleme specifique a cette requete
+          example: "Le montant de 350000 centimes depasse la limite autorisee de 300000 centimes (3 000 EUR)."
+        instance:
+          type: string
+          description: URI de la ressource ou s'est produite l'erreur
+          example: "/payments"
