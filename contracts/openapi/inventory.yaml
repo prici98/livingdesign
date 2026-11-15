@@ -1,0 +1,546 @@
+openapi: 3.1.0
+info:
+  title: LivingDesign - Inventory Service API
+  version: 1.0.0
+  description: |
+    API REST du microservice Inventory & Logistique de LivingDesign.
+    Gere le stock multi-entrepots, le suivi des alertes de rupture, et
+    l'orchestration des reservations idempotentes pour le pattern Saga.
+
+servers:
+  - url: http://localhost:8002
+    description: Environnement local de developpement
+
+paths:
+  /stock/{product_id}:
+    get:
+      summary: Consulter le stock d'un produit
+      description: |
+        Retourne la synthese de disponibilite pour un produit donne (stock physique,
+        reserve et disponible a la vente) ainsi que la repartition par entrepot.
+      operationId: getStockByProductId
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          description: Identifiant unique du produit
+          schema:
+            type: integer
+            minimum: 1
+            example: 1042
+      responses:
+        "200":
+          description: Disponibilite du produit calculee avec succes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductStockSummary"
+        "404":
+          description: Produit introuvable en stock
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /stock/low-stock:
+    get:
+      summary: Lister les produits en stock critique
+      description: |
+        Retourne tous les produits dont le stock disponible global est inferieur ou egal
+        au seuil d'alerte (base sur la vue SQL low_stock).
+      operationId: getLowStockAlerts
+      responses:
+        "200":
+          description: Liste des alertes de stock critique
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LowStockAlert"
+
+  /reservations:
+    post:
+      summary: Creer une reservation de stock (Saga)
+      description: |
+        Reserve une quantite donnee d'un produit dans un entrepot specifique.
+        L'identifiant UUID fourni par le client garantit l'idempotence complete de l'operation.
+        Si la reservation existe deja avec cet identifiant, elle est retournee sans double reservation.
+      operationId: createReservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationCreateRequest"
+      responses:
+        "201":
+          description: Reservation effectuee avec succes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "200":
+          description: Reservation existante deja traitee (rejeu idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "400":
+          description: Donnees de requete invalides
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Stock insuffisant pour honorer la reservation
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /reservations/{id}:
+    get:
+      summary: Consulter une reservation par identifiant
+      description: Recupere le statut courant d'une reservation via son identifiant UUID
+      operationId: getReservationById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID unique de la reservation
+          schema:
+            type: string
+            format: uuid
+            example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      responses:
+        "200":
+          description: Detail de la reservation trouvee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "404":
+          description: Reservation introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /reservations/order/{order_id}:
+    get:
+      summary: Consulter les reservations d'une commande
+      description: Liste l'ensemble des reservations de stock liees a une commande
+      operationId: getReservationsByOrderId
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          description: Identifiant numerique de la commande
+          schema:
+            type: integer
+            minimum: 1
+            example: 101
+      responses:
+        "200":
+          description: Liste des reservations de la commande
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reservation"
+
+  /reservations/{id}/release:
+    post:
+      summary: Liberer une reservation (Compensation Saga)
+      description: |
+        Annule la reservation et restitue la quantite au stock disponible.
+        Appele lorsque le paiement echoue ou que la commande est annulee.
+      operationId: releaseReservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID de la reservation a liberer
+          schema:
+            type: string
+            format: uuid
+            example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      responses:
+        "200":
+          description: Reservation liberee avec succes (status RELEASED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "404":
+          description: Reservation introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Transition d'etat impossible (ex. deja COMMITTED)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /reservations/{id}/commit:
+    post:
+      summary: Confirmer une reservation (Validation Saga)
+      description: |
+        Valide definitivement la reservation apres reception confirmee du paiement.
+        Le stock physique et le stock reserve sont tous deux diminues.
+      operationId: commitReservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID de la reservation a valider
+          schema:
+            type: string
+            format: uuid
+            example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      responses:
+        "200":
+          description: Reservation confirmee avec succes (status COMMITTED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "404":
+          description: Reservation introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Transition d'etat impossible (ex. deja RELEASED)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /warehouses:
+    get:
+      summary: Lister les entrepots logistiques
+      description: Retourne l'ensemble des entrepots avec leurs localisations et capacites
+      operationId: getWarehouses
+      responses:
+        "200":
+          description: Liste des entrepots enregistres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Warehouse"
+
+  /warehouses/fill-rate:
+    get:
+      summary: Consulter le taux de remplissage des entrepots
+      description: |
+        Retourne le taux d'occupation de chaque entrepot avec alerte en cas
+        d'occupation superieure ou egale a 90% (vue SQL warehouse_fill_rate).
+      operationId: getWarehousesFillRate
+      responses:
+        "200":
+          description: Taux de remplissage calcule pour chaque entrepot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WarehouseFillRate"
+
+  /health:
+    get:
+      summary: Verification de disponibilite (Healthcheck)
+      description: Point de terminaison utilise par Docker et la Gateway
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service operationnel
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+
+components:
+  schemas:
+    ReservationStatus:
+      type: string
+      description: Statut de cycle de vie de la reservation Saga
+      enum:
+        - RESERVED
+        - RELEASED
+        - COMMITTED
+      example: "RESERVED"
+
+    WarehouseStatus:
+      type: string
+      description: Statut de capacite d'un entrepot
+      enum:
+        - NORMAL
+        - SATURATION_PROCHE
+      example: "NORMAL"
+
+    Warehouse:
+      type: object
+      required:
+        - id
+        - name
+        - capacity_units
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          description: Identifiant de l'entrepot
+          example: 1
+        name:
+          type: string
+          description: Nom unique de l'entrepot
+          example: "Entrepôt Nord - Lille"
+        city:
+          type: string
+          nullable: true
+          description: Ville d'implantation
+          example: "Lille"
+        capacity_units:
+          type: integer
+          minimum: 1
+          description: Capacite maximale de stockage en unites
+          example: 15000
+
+    WarehouseFillRate:
+      type: object
+      required:
+        - id
+        - name
+        - capacity_units
+        - units_stored
+        - fill_pct
+        - status
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Entrepôt Nord - Lille"
+        city:
+          type: string
+          nullable: true
+          example: "Lille"
+        capacity_units:
+          type: integer
+          example: 15000
+        units_stored:
+          type: integer
+          minimum: 0
+          description: Nombre total d'articles physiques stockes
+          example: 12500
+        fill_pct:
+          type: number
+          format: float
+          description: Pourcentage de remplissage arrondi a 0.1
+          example: 83.3
+        status:
+          $ref: "#/components/schemas/WarehouseStatus"
+
+    WarehouseStockItem:
+      type: object
+      required:
+        - warehouse_id
+        - warehouse_name
+        - quantity
+        - reserved
+        - available
+      properties:
+        warehouse_id:
+          type: integer
+          example: 1
+        warehouse_name:
+          type: string
+          example: "Entrepôt Nord - Lille"
+        quantity:
+          type: integer
+          minimum: 0
+          description: Stock physique
+          example: 25
+        reserved:
+          type: integer
+          minimum: 0
+          description: Quantite reservee pour les commandes en cours
+          example: 3
+        available:
+          type: integer
+          minimum: 0
+          description: Quantite reellement disponible a la vente (quantity - reserved)
+          example: 22
+
+    ProductStockSummary:
+      type: object
+      required:
+        - product_id
+        - total_physical_quantity
+        - total_reserved
+        - total_available
+        - warehouses
+      properties:
+        product_id:
+          type: integer
+          minimum: 1
+          example: 1042
+        total_physical_quantity:
+          type: integer
+          minimum: 0
+          description: Total physique cumule tous entrepots confondus
+          example: 50
+        total_reserved:
+          type: integer
+          minimum: 0
+          description: Total reserve cumule tous entrepots confondus
+          example: 5
+        total_available:
+          type: integer
+          minimum: 0
+          description: Total disponible a la vente (physique - reserve)
+          example: 45
+        warehouses:
+          type: array
+          description: Detail par entrepot
+          items:
+            $ref: "#/components/schemas/WarehouseStockItem"
+
+    LowStockAlert:
+      type: object
+      required:
+        - product_id
+        - available
+        - threshold
+      properties:
+        product_id:
+          type: integer
+          minimum: 1
+          example: 1042
+        available:
+          type: integer
+          description: Quantite totale disponible a la vente
+          example: 3
+        threshold:
+          type: integer
+          description: Seuil d'alerte declare
+          example: 5
+
+    ReservationCreateRequest:
+      type: object
+      required:
+        - id
+        - order_id
+        - product_id
+        - warehouse_id
+        - quantity
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifiant unique client garantissant l'idempotence de la reservation
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        order_id:
+          type: integer
+          minimum: 1
+          description: Identifiant de la commande associee
+          example: 101
+        product_id:
+          type: integer
+          minimum: 1
+          description: Identifiant du produit a reserver
+          example: 1042
+        warehouse_id:
+          type: integer
+          minimum: 1
+          description: Entrepot selectionne pour le prelevement
+          example: 1
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantite positive d'articles a reserver
+          example: 2
+
+    Reservation:
+      type: object
+      required:
+        - id
+        - order_id
+        - product_id
+        - warehouse_id
+        - quantity
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        order_id:
+          type: integer
+          minimum: 1
+          example: 101
+        product_id:
+          type: integer
+          minimum: 1
+          example: 1042
+        warehouse_id:
+          type: integer
+          minimum: 1
+          example: 1
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        status:
+          $ref: "#/components/schemas/ReservationStatus"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-15T14:35:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-11-15T14:35:00Z"
+
+    ProblemDetails:
+      type: object
+      description: Format standard d'erreur HTTP selon la RFC 9457
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          format: uri
+          example: "https://livingdesign.internal/errors/insufficient-stock"
+        title:
+          type: string
+          example: "Stock insuffisant"
+        status:
+          type: integer
+          example: 409
+        detail:
+          type: string
+          example: "Quantite disponible insuffisante dans l'entrepot selectionne pour satisfaire la demande."
+        instance:
+          type: string
+          example: "/reservations"

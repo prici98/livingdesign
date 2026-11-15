@@ -38,3 +38,43 @@ def test_payments_openapi_spec_structure():
     assert "FailureReason" in schemas
     assert "PaymentCreateRequest" in schemas
     assert "ProblemDetails" in schemas
+
+
+def test_inventory_openapi_spec_structure():
+    """Verifie que le contrat OpenAPI de inventory est valide et complet."""
+    spec_path = CONTRACTS_DIR / "openapi" / "inventory.yaml"
+    assert spec_path.is_file(), "Le fichier inventory.yaml est introuvable."
+
+    with open(spec_path, encoding="utf-8") as f:
+        spec = yaml.safe_load(f)
+
+    assert spec.get("openapi", "").startswith("3.1"), "OpenAPI doit etre en version 3.1.x"
+    assert "info" in spec and "title" in spec["info"]
+    assert "paths" in spec
+
+    # Verifie les endpoints du stock, de la Saga et des entrepots
+    paths = spec["paths"]
+    assert "/stock/{product_id}" in paths
+    assert "/stock/low-stock" in paths
+    assert "/reservations" in paths
+    assert "post" in paths["/reservations"]
+    assert "/reservations/{id}" in paths
+    assert "/reservations/order/{order_id}" in paths
+    assert "/reservations/{id}/release" in paths
+    assert "/reservations/{id}/commit" in paths
+    assert "/warehouses" in paths
+    assert "/warehouses/fill-rate" in paths
+    assert "/health" in paths
+
+    # Verifie les schemas cles de stock et Saga
+    schemas = spec.get("components", {}).get("schemas", {})
+    assert "ProductStockSummary" in schemas
+    assert "LowStockAlert" in schemas
+    assert "Reservation" in schemas
+    assert "ReservationStatus" in schemas
+    assert "ReservationCreateRequest" in schemas
+    assert "Warehouse" in schemas
+    assert "WarehouseFillRate" in schemas
+    assert "ProblemDetails" in schemas
+
+
