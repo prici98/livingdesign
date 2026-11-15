@@ -3,20 +3,26 @@ info:
   title: LivingDesign - Payments Service API
   version: 1.0.0
   description: |
-    API REST du microservice Payments de LivingDesign.
+    API REST versionnee du microservice Payments de LivingDesign.
     Gere l'execution, la consultation et l'idempotence des transactions financieres.
     Respecte les regles metier de l'ADR-001 (plafond de 3 000 EUR, montants en centimes).
+    Securise par authentification JWT (utilisateurs) et X-API-Key (appels inter-services RBAC).
 
 servers:
   - url: http://localhost:8003
     description: Environnement local de developpement
 
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
 paths:
-  /payments:
+  /v1/payments:
     post:
       summary: Executer un paiement
       description: |
         Traite un paiement pour une commande donnee de maniere strictement idempotente.
+        Accessible par le role service_account (service orders) ou admin.
         Si la cle d'idempotence fournie existe deja, le paiement existant est retourne sans reexecution.
         Tout montant superieur a 300 000 centimes (3 000 EUR) est enregistre avec le statut FAILED.
       operationId: processPayment
@@ -54,6 +60,18 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
+        "401":
+          description: Jeton absent, expire ou cle d'API invalide
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants (role non autorise)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "422":
           description: Erreur de validation structurelle des donnees
           content:
@@ -67,10 +85,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
 
-  /payments/{id}:
+  /v1/payments/{id}:
     get:
       summary: Consulter un paiement par identifiant
-      description: Recupere les details d'une transaction via son identifiant unique
+      description: Recupere les details d'une transaction via son identifiant unique (roles admin, analyst, service_account).
       operationId: getPaymentById
       parameters:
         - name: id
@@ -88,6 +106,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Payment"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "404":
           description: Paiement introuvable
           content:
@@ -95,10 +125,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
 
-  /payments/order/{order_id}:
+  /v1/payments/order/{order_id}:
     get:
       summary: Consulter les paiements d'une commande
-      description: Recupere la liste des transactions liees a une commande specifique
+      description: Recupere la liste des transactions liees a une commande specifique.
       operationId: getPaymentsByOrderId
       parameters:
         - name: order_id
@@ -118,6 +148,18 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Payment"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "404":
           description: Aucun paiement trouve pour cette commande
           content:
@@ -128,8 +170,9 @@ paths:
   /health:
     get:
       summary: Verification de disponibilite (Healthcheck)
-      description: Point de terminaison utilise par la gateway et Docker pour verifier l'etat du service
+      description: Point de terminaison public utilise par la gateway et Docker pour verifier l'etat du service
       operationId: healthCheck
+      security: []
       responses:
         "200":
           description: Service operationnel
@@ -145,6 +188,18 @@ paths:
                     example: "healthy"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Jeton JWT utilisateur transmis dans l'entete Authorization Bearer (roles admin, analyst, etc.)
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Cle API pour les communications inter-services machine-to-machine (role service_account)
+
   schemas:
     PaymentStatus:
       type: string
@@ -260,5 +315,4 @@ components:
         instance:
           type: string
           description: URI de la ressource ou s'est produite l'erreur
-          example: "/payments"
-
+          example: "/v1/payments"

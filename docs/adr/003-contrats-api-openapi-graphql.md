@@ -27,9 +27,14 @@ Nous adoptons l'approche **Contract-First** avec une repartition bimodale :
 2. **OpenAPI 3.1 pour les services transactionnels (`payments`, `inventory`, `orders`, `auth`)** :
    - Schemas : `contracts/openapi/payments.yaml` et `contracts/openapi/inventory.yaml`.
    - Conforme au standard HTTP REST et JSON Schema 2020-12.
+   - Versioning explicite des routes avec prefixe `/v1/` (`/v1/payments`, `/v1/stock/{product_id}`, etc.).
+   - Declaration formelle de la securite et du RBAC via `securitySchemes` :
+     - `BearerAuth` (JWT) pour les utilisateurs applicatifs (`admin`, `logistics`, `analyst`, `catalog_manager`).
+     - `ApiKeyAuth` (`X-API-Key`) pour les echanges machine-to-machine inter-services (`service_account`).
+     - Reponses d'erreur standardisees `401 Unauthorized` et `403 Forbidden`.
    - Idempotence bancaire standardisee via le header IETF `Idempotency-Key` (UUID v4).
    - Format d'erreur normalise sur la RFC 9457 (`application/problem+json`).
-   - Prise en charge native du pattern Saga dans `inventory` (`POST /reservations`, `/commit`, `/release`).
+   - Prise en charge native du pattern Saga dans `inventory` (`POST /v1/reservations`, `/commit`, `/release`).
 
 3. **Validation automatique dans la suite de tests** :
    - Le fichier `tests/test_contracts.py` analyse la syntaxe et l'AST des contrats a l'aide de PyYAML et `graphql-core` avant tout deploiement ou ecriture de code metier.
@@ -39,3 +44,4 @@ Nous adoptons l'approche **Contract-First** avec une repartition bimodale :
 - (+) Garantie contractuelle stricte contre les regressions et les erreurs d'arrondi (montants toujours en centimes entiers).
 - (+) Traitement normalise des erreurs via Problem Details (RFC 9457).
 - (−) Necessite de maintenir synchronises les schemas de contrats avec le code des schemas Pydantic lors des evolutions futures (garanti par les tests automatises).
+

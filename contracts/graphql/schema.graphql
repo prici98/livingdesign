@@ -1,10 +1,28 @@
 """
 Contrat GraphQL du microservice Catalog de LivingDesign.
 Expose la consultation et l'administration des produits stockes dans MongoDB.
+
+Securite et RBAC (Model de droits du sujet) :
+- Les requetes et mutations sont securisees par le jeton JWT transmis dans l'en-tete HTTP Authorization: Bearer <jeton>.
+- Tout appel sans jeton valide declenche une erreur avec le code UNAUTHENTICATED (HTTP 401).
+- Tout appel dont le role est insuffisant declenche une erreur avec le code FORBIDDEN (HTTP 403).
+- Lecture (Query) : accessible aux roles admin, catalog_manager, analyst, logistics, service_account.
+- Ecriture / Mutation : strictement reservee aux roles admin et catalog_manager.
 """
 
 scalar JSON
 scalar DateTime
+
+"""
+Roles officiels du modele RBAC LivingDesign (conforme au sujet d'examen).
+"""
+enum Role {
+  ADMIN
+  CATALOG_MANAGER
+  ANALYST
+  LOGISTICS
+  SERVICE_ACCOUNT
+}
 
 """
 Categories officielles du catalogue LivingDesign.
@@ -146,3 +164,4 @@ type Mutation {
   """
   setProductStatus(productId: Int!, status: ProductStatus!): Product!
 }
+

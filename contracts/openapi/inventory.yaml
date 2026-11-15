@@ -3,16 +3,21 @@ info:
   title: LivingDesign - Inventory Service API
   version: 1.0.0
   description: |
-    API REST du microservice Inventory & Logistique de LivingDesign.
+    API REST versionnee du microservice Inventory & Logistique de LivingDesign.
     Gere le stock multi-entrepots, le suivi des alertes de rupture, et
     l'orchestration des reservations idempotentes pour le pattern Saga.
+    Securise selon le modele RBAC (roles logistics, admin, analyst, service_account).
 
 servers:
   - url: http://localhost:8002
     description: Environnement local de developpement
 
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
 paths:
-  /stock/{product_id}:
+  /v1/stock/{product_id}:
     get:
       summary: Consulter le stock d'un produit
       description: |
@@ -35,6 +40,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProductStockSummary"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "404":
           description: Produit introuvable en stock
           content:
@@ -42,12 +59,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
 
-  /stock/low-stock:
+  /v1/stock/low-stock:
     get:
       summary: Lister les produits en stock critique
       description: |
         Retourne tous les produits dont le stock disponible global est inferieur ou egal
-        au seuil d'alerte (base sur la vue SQL low_stock).
+        au seuil d'alerte (base sur la vue SQL low_stock). Roles autorises: admin, logistics, analyst.
       operationId: getLowStockAlerts
       responses:
         "200":
@@ -58,14 +75,26 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/LowStockAlert"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
 
-  /reservations:
+  /v1/reservations:
     post:
       summary: Creer une reservation de stock (Saga)
       description: |
         Reserve une quantite donnee d'un produit dans un entrepot specifique.
         L'identifiant UUID fourni par le client garantit l'idempotence complete de l'operation.
-        Si la reservation existe deja avec cet identifiant, elle est retournee sans double reservation.
+        Accessible principalement par le role service_account (service orders) ou admin.
       operationId: createReservation
       requestBody:
         required: true
@@ -92,6 +121,18 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants (role non autorise a reserver)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "409":
           description: Stock insuffisant pour honorer la reservation
           content:
@@ -99,7 +140,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
 
-  /reservations/{id}:
+  /v1/reservations/{id}:
     get:
       summary: Consulter une reservation par identifiant
       description: Recupere le statut courant d'une reservation via son identifiant UUID
@@ -120,6 +161,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Reservation"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "404":
           description: Reservation introuvable
           content:
@@ -127,7 +180,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
 
-  /reservations/order/{order_id}:
+  /v1/reservations/order/{order_id}:
     get:
       summary: Consulter les reservations d'une commande
       description: Liste l'ensemble des reservations de stock liees a une commande
@@ -150,13 +203,25 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Reservation"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
 
-  /reservations/{id}/release:
+  /v1/reservations/{id}/release:
     post:
       summary: Liberer une reservation (Compensation Saga)
       description: |
         Annule la reservation et restitue la quantite au stock disponible.
-        Appele lorsque le paiement echoue ou que la commande est annulee.
+        Appele par service_account (service orders) lorsque le paiement echoue.
       operationId: releaseReservation
       parameters:
         - name: id
@@ -174,6 +239,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Reservation"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "404":
           description: Reservation introuvable
           content:
@@ -187,11 +264,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
 
-  /reservations/{id}/commit:
+  /v1/reservations/{id}/commit:
     post:
       summary: Confirmer une reservation (Validation Saga)
       description: |
-        Valide definitivement la reservation apres reception confirmee du paiement.
+        Valide definitivement la reservation apres confirmation de paiement.
         Le stock physique et le stock reserve sont tous deux diminues.
       operationId: commitReservation
       parameters:
@@ -210,6 +287,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Reservation"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
         "404":
           description: Reservation introuvable
           content:
@@ -223,10 +312,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetails"
 
-  /warehouses:
+  /v1/warehouses:
     get:
       summary: Lister les entrepots logistiques
-      description: Retourne l'ensemble des entrepots avec leurs localisations et capacites
+      description: |
+        Retourne l'ensemble des entrepots avec leurs localisations et capacites.
+        Roles autorises: admin, logistics, analyst.
       operationId: getWarehouses
       responses:
         "200":
@@ -237,13 +328,25 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Warehouse"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
 
-  /warehouses/fill-rate:
+  /v1/warehouses/fill-rate:
     get:
       summary: Consulter le taux de remplissage des entrepots
       description: |
         Retourne le taux d'occupation de chaque entrepot avec alerte en cas
-        d'occupation superieure ou egale a 90% (vue SQL warehouse_fill_rate).
+        d'occupation superieure ou egale a 90% (vue SQL warehouse_fill_rate). Roles: admin, logistics, analyst.
       operationId: getWarehousesFillRate
       responses:
         "200":
@@ -254,12 +357,25 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/WarehouseFillRate"
+        "401":
+          description: Non authentifie
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "403":
+          description: Droits insuffisants
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
 
   /health:
     get:
       summary: Verification de disponibilite (Healthcheck)
-      description: Point de terminaison utilise par Docker et la Gateway
+      description: Point de terminaison public utilise par Docker et la Gateway
       operationId: healthCheck
+      security: []
       responses:
         "200":
           description: Service operationnel
@@ -275,6 +391,18 @@ paths:
                     example: "healthy"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Jeton JWT utilisateur transmis dans l'entete Authorization Bearer (roles admin, logistics, analyst)
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Cle API pour les communications inter-services machine-to-machine (role service_account)
+
   schemas:
     ReservationStatus:
       type: string
@@ -543,5 +671,4 @@ components:
           example: "Quantite disponible insuffisante dans l'entrepot selectionne pour satisfaire la demande."
         instance:
           type: string
-          example: "/reservations"
-
+          example: "/v1/reservations"
