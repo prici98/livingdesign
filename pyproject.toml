@@ -17,8 +17,10 @@ dependencies = [
 # Outils de développement : installés chez nous, jamais dans les images Docker.
 [dependency-groups]
 dev = [
-    "pytest>=8.3",                  
-    "ruff>=0.8",                    
+    "graphql-core>=3.3.2",
+    "pytest>=8.3",
+    "pyyaml>=6.0.3",
+    "ruff>=0.8",
 ]
 
 [tool.uv.workspace]
@@ -42,4 +44,4 @@ target-version = "py312"
 select = ["E", "F", "UP", "B"]
 
 [tool.pytest.ini_options]
-testpaths = ["libs", "data-platform"]   # où pytest cherche les tests
+testpaths = ["libs", "data-platform", "tests"]   # où pytest cherche les tests
