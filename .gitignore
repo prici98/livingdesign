@@ -9,6 +9,7 @@ infra/.env
 
 # Données : ni le dataset brut, ni ce qu'on génère
 data-platform/data/
+ops/backups/
 
 # Java (Maven) et éditeurs
 target/
