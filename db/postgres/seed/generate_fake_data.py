@@ -206,9 +206,9 @@ def seed_orders_and_payments(products: list[Product]) -> None:
         # Règle métier de LivingDesign : paiement refusé au-dessus de 3 000 €,
         # et 2 % de cartes refusées au hasard.
         if total > PAYMENT_LIMIT_CENTS:
-            paid, reason = False, "amount_above_limit"
+            paid, reason = False, "AMOUNT_EXCEEDS_LIMIT"
         elif random.random() < 0.02:
-            paid, reason = False, "card_declined"
+            paid, reason = False, "CARD_DECLINED"
         else:
             paid, reason = True, None
 
