@@ -7,5 +7,7 @@
 | `mongo/init/`    | `01_catalog.js` : utilisateur, validateur, index | automatiquement, au 1er démarrage de MongoDB |
 | `mongo/seed/`    | `load_catalog.py` : charge le catalogue nettoyé | à la main, après le démarrage |
 
+Ordre sur une base neuve : `init` (automatique) → `services/orders/migrations/migrate.py` → `seed`.
+
 Les scripts `init` ne tournent que sur une base vide : après une modification,
 `docker compose -f infra/docker-compose.yml down -v` puis `up -d`.
