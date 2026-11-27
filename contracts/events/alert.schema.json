@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://livingdesign.example/events/alert.schema.json",
+  "title": "alert",
+  "description": "Une alerte détectée par le job Spark Structured Streaming. Topic : livingdesign.alerts, clé : alert_id. Aussi enregistrée dans la table analytics.alerts. Un même alert_id peut être republié après une reprise : les consommateurs ignorent les doublons.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["alert_id", "alert_type", "severity", "message", "value", "threshold", "occurred_at"],
+  "properties": {
+    "alert_id": {"type": "string", "description": "Identifiant déterministe : LOW_STOCK:<event_id> ou ORDER_SPIKE:<début de fenêtre>."},
+    "alert_type": {"enum": ["LOW_STOCK", "ORDER_SPIKE"]},
+    "severity": {"enum": ["WARNING", "CRITICAL"]},
+    "product_id": {"type": ["integer", "null"]},
+    "warehouse_id": {"type": ["integer", "null"]},
+    "message": {"type": "string"},
+    "value": {"type": "integer", "description": "Valeur observée (stock disponible, ou commandes par minute)."},
+    "threshold": {"type": "integer"},
+    "occurred_at": {"type": "string", "format": "date-time"}
+  }
+}
