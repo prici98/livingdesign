@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://livingdesign.example/events/clickstream-event.schema.json",
+  "title": "clickstream-event",
+  "description": "Une action d'un visiteur sur le site. Topic : livingdesign.clickstream, clé : session_id (les actions d'une visite restent dans l'ordre). Simulé par data-platform/streaming/producer.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "occurred_at", "session_id", "action"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"const": "clickstream"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "session_id": {"type": "string", "minLength": 1},
+    "customer_id": {"type": ["integer", "null"], "minimum": 1, "description": "null pour un visiteur non connecté."},
+    "action": {"enum": ["page_view", "search", "add_to_cart"]},
+    "product_id": {"type": ["integer", "null"], "minimum": 1},
+    "category": {"type": ["string", "null"]},
+    "query": {"type": ["string", "null"], "description": "Texte recherché, seulement pour action = search."}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://livingdesign.example/events/stock-updated.schema.json",
+  "title": "stock-updated",
+  "description": "Le stock d'un produit dans un entrepôt a changé. Topic : livingdesign.stock, clé : warehouse_id (les mises à jour d'un même entrepôt restent dans l'ordre). Publié par le service inventory (simulé par le producteur tant que le service n'existe pas).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "occurred_at", "product_id", "warehouse_id", "quantity", "reserved", "low_stock_threshold"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"const": "stock-updated"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "product_id": {"type": "integer", "minimum": 1},
+    "warehouse_id": {"type": "integer", "minimum": 1},
+    "quantity": {"type": "integer", "minimum": 0, "description": "Stock physique après le changement."},
+    "reserved": {"type": "integer", "minimum": 0, "description": "Partie réservée pour des commandes en cours."},
+    "low_stock_threshold": {"type": "integer", "minimum": 0, "description": "Seuil d'alerte : disponible = quantity - reserved."}
+  }
+}
