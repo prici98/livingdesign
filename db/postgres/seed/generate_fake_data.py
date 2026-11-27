@@ -15,6 +15,7 @@
 #
 #  Prérequis : docker compose -f infra/docker-compose.yml up -d
 #              et python data-platform/jobs-spark/ingest_dataset.py
+#              et python services/orders/migrations/migrate.py (partitionnement)
 #  Lancer    : python db/postgres/seed/generate_fake_data.py   (depuis la racine ;
 #              relançable : vide puis recharge)
 # =============================================================================
@@ -201,7 +202,9 @@ def seed_orders_and_payments(products: list[Product]) -> None:
             quantity = random.choices([1, 2, 4], weights=[85, 12, 3])[0]
             total += quantity * p.price_cents
         
-            items.append((order_id, p.product_id, quantity, p.price_cents))
+            # order_created_at : la date de la commande, recopiée dans la ligne. Depuis la
+            # migration 001 (partitionnement), la clé étrangère vers orders porte sur (id, created_at).
+            items.append((order_id, created, p.product_id, quantity, p.price_cents))
 
         # Règle métier de LivingDesign : paiement refusé au-dessus de 3 000 €,
         # et 2 % de cartes refusées au hasard.
@@ -232,7 +235,8 @@ def seed_orders_and_payments(products: list[Product]) -> None:
         with cur.copy("COPY orders (id, customer_id, status, total_cents, created_at) FROM STDIN") as copy:
             for row in orders:
                 copy.write_row(row)
-        with cur.copy("COPY order_items (order_id, product_id, quantity, unit_price_cents) FROM STDIN") as copy:
+        columns = "order_id, order_created_at, product_id, quantity, unit_price_cents"
+        with cur.copy(f"COPY order_items ({columns}) FROM STDIN") as copy:
             for row in items:
                 copy.write_row(row)
         cur.execute("SELECT setval('customers_id_seq', (SELECT max(id) FROM customers))")

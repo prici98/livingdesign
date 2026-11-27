@@ -148,11 +148,15 @@ def table_sizes() -> dict[str, int]:
 
 
 def gain_label(t_before: float, scan_before: str, t_after: float) -> str:
-    # Si, même sans l'index testé, PostgreSQL utilisait déjà un AUTRE index
-    # (la clé primaire par exemple), l'index testé n'apporte rien : il est redondant.
+    # On juge sur le temps : un index utile divise au moins le temps par 2.
+    ratio = t_before / t_after if t_after > 0 else 0
+    if ratio >= 2:
+        return f"× {ratio:.0f}"
+    # Sinon, si PostgreSQL utilisait déjà un AUTRE index sans celui-ci (la clé
+    # primaire par exemple), l'index testé est redondant.
     if not scan_before.startswith(("Seq Scan", "Parallel Seq Scan")):
         return "aucun : un autre index suffit déjà"
-    return f"× {t_before / t_after:.0f}" if t_after > 0 else "—"
+    return "faible"
 
 
 def write_report(results: list[dict], sizes: dict[str, int]) -> None:
